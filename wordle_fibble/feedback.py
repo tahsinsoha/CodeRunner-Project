@@ -28,6 +28,23 @@ def score(guess, secret):
     return colors
 
 
+def score_many(guess, secrets):
+    """Vectorized `score`: feedback for one guess against many secrets.
+
+    `guess` is a length-5 array of letter indices and `secrets` an (N, 5)
+    array (see `words.encode` / `encode_many`). Returns an (N, 5) int8 array.
+    """
+    green = secrets == guess
+    colors = np.where(green, GREEN, GRAY).astype(np.int8)
+    remaining = {int(c): ((secrets == c) & ~green).sum(axis=1) for c in set(guess.tolist())}
+    for i in range(WORD_LEN):
+        c = int(guess[i])
+        yellow = ~green[:, i] & (remaining[c] > 0)
+        colors[yellow, i] = YELLOW
+        remaining[c] = remaining[c] - yellow
+    return colors
+
+
 def apply_lies(colors, n_lies, rng):
     """Corrupt `n_lies` distinct tiles of a feedback line.
 

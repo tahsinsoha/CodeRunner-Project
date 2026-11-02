@@ -33,6 +33,35 @@ print(env.render(show_truth=True))
 
 Word lists in `data/`: `answers.txt` (2,315 secrets) and `allowed.txt` (12,972 guesses, includes the answers).
 
+## Candidate filter
+
+Keeps the words that could still be the secret. A word fits a feedback line when its true feedback differs from the shown feedback in exactly `n_lies` tiles; already-guessed words are excluded.
+
+```python
+from wordle_fibble import CandidateFilter, is_consistent, load_allowed
+
+cf = CandidateFilter()                    # possible secrets = 2,315 answers
+cf = CandidateFilter(load_allowed())      # or all 12,972 allowed words
+words = cf.from_obs(obs)                  # list of remaining candidates
+mask = cf.mask(obs["guesses"], obs["feedback"], obs["n_lies"])  # bool array over cf.words
+
+is_consistent("relay", obs["guesses"], obs["feedback"], obs["n_lies"])  # one word, e.g. for LLM retries
+```
+
+## Baseline solvers
+
+Solvers implement `act(obs) -> word` (see `wordle_fibble.solvers.Solver`).
+
+- `RandomSolver`: random word among the remaining candidates.
+- `RuleBasedSolver`: remaining candidate with the most common letters (by position and by presence among candidates); deterministic.
+
+```bash
+python evaluate.py                                        # both baselines, Wordle + Fibble1-5, 500 games, 6 guesses
+python evaluate.py --guesses 9 --candidates allowed --csv results/baselines.csv
+```
+
+`wordle_fibble.evaluation.secret_list(n, seed)` gives the fixed list of secrets so every solver is tested on the same words; `evaluate(...)` reports win rate, mean guesses (a loss counts as the guess limit, as in the paper) and wins by round.
+
 ## Playing in the terminal
 
 ```bash

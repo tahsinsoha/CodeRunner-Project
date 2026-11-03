@@ -1,0 +1,70 @@
+# Ollama server on one NRP GPU (RTX 3090 or A10, both 24 GB), reachable
+# inside the namespace at http://wordle-ollama:11434.
+# Stop it when not running LLM experiments, so the GPU is not left idle:
+#   kubectl -n gilpin-lab scale deployment wordle-ollama --replicas=0
+# Start it again with --replicas=1. Downloaded models stay on the volume.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: wordle-ollama
+  namespace: gilpin-lab
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: wordle-ollama
+  template:
+    metadata:
+      labels:
+        app: wordle-ollama
+    spec:
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: nvidia.com/gpu.product
+                    operator: In
+                    values:
+                      - NVIDIA-GeForce-RTX-3090
+                      - NVIDIA-A10
+      containers:
+        - name: ollama
+          image: ollama/ollama:latest
+          env:
+            - name: OLLAMA_HOST
+              value: "0.0.0.0:11434"
+            - name: OLLAMA_KEEP_ALIVE
+              value: "30m"
+          ports:
+            - containerPort: 11434
+          resources:
+            requests:
+              cpu: "4"
+              memory: 16Gi
+              nvidia.com/gpu: 1
+            limits:
+              cpu: "4"
+              memory: 16Gi
+              nvidia.com/gpu: 1
+          volumeMounts:
+            - name: models
+              mountPath: /root/.ollama
+      volumes:
+        - name: models
+          persistentVolumeClaim:
+            claimName: wordle-ollama
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: wordle-ollama
+  namespace: gilpin-lab
+spec:
+  selector:
+    app: wordle-ollama
+  ports:
+    - port: 11434
+      targetPort: 11434

@@ -1,2 +1,14 @@
 numpy>=1.26
 pytest>=8
+
+# RL solvers (DQN, PPO) written in PyTorch
+torch>=2.2
+
+# LLM solver: hosted model by API, open-weight model through a local Ollama server
+openai>=1.40
+ollama>=0.3
+
+# Experiments and report charts
+pandas>=2.0
+matplotlib>=3.8
+tqdm>=4.66

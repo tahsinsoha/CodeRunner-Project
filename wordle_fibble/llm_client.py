@@ -4,12 +4,14 @@ Providers (none of these models were tested in the paper):
 
     deepseek : hosted DeepSeek API (paid). Key in DEEPSEEK_API_KEY.
                Models: deepseek-flash (V4.1 Flash), deepseek-v4-pro.
-    ollama   : our own Ollama server on an NRP GPU (nrp/ollama.yaml), for an
-               open-weight model such as gpt-oss:20b. No key needed.
-    nrp      : NRP managed LLM service (free), backup option. Key in NRP_LLM_TOKEN.
+    ollama   : an Ollama server for an open-weight model such as gpt-oss:20b.
+               Address in OLLAMA_BASE_URL (default http://localhost:11434/v1).
+               No key needed.
+    custom   : any other OpenAI-compatible server. Address in LLM_BASE_URL,
+               key in LLM_API_KEY.
 
-Keys come from the environment or from a .env file (repo root or /work/.env),
-which is never committed:
+Keys come from the environment or from a .env file, which is never committed:
+the repo's .env, or the file named in LLM_ENV_FILE.
 
     DEEPSEEK_API_KEY=sk-...
 
@@ -35,25 +37,29 @@ PROVIDERS = {
         "key_help": "get one at https://platform.deepseek.com",
     },
     "ollama": {
-        "base_url": os.environ.get("OLLAMA_BASE_URL", "http://wordle-ollama:11434/v1"),
+        "base_url": os.environ.get("OLLAMA_BASE_URL", "http://localhost:11434/v1"),
         "key_var": None,  # Ollama ignores the key, but the client needs some value
         "models": ["gpt-oss:20b"],
         "key_help": "",
     },
-    "nrp": {
-        "base_url": "https://ellm.nrp-nautilus.io/v1",
-        "key_var": "NRP_LLM_TOKEN",
-        "models": ["gpt-oss", "gemma", "qwen3"],
-        "key_help": "get one at https://nrp.ai/llmtoken",
+    "custom": {
+        "base_url": os.environ.get("LLM_BASE_URL", ""),
+        "key_var": "LLM_API_KEY",
+        "models": [os.environ.get("LLM_MODEL", "")],
+        "key_help": "and set LLM_BASE_URL and LLM_MODEL",
     },
 }
 
 
 def load_key(var, env_files=None):
-    """Key from the environment, else from a .env file (repo root or /work)."""
+    """Key from the environment, else from a .env file (repo root, or LLM_ENV_FILE)."""
     if os.environ.get(var):
         return os.environ[var].strip()
-    for path in env_files or [REPO_DIR / ".env", Path("/work/.env")]:
+    if env_files is None:
+        env_files = [REPO_DIR / ".env"]
+        if os.environ.get("LLM_ENV_FILE"):
+            env_files.append(Path(os.environ["LLM_ENV_FILE"]))
+    for path in env_files:
         path = Path(path)
         if path.is_file():
             for line in path.read_text().splitlines():
@@ -69,7 +75,7 @@ def thinking_options(provider, thinking):
         return {}
     if provider == "deepseek":
         return {"extra_body": {"thinking": {"type": "enabled" if thinking else "disabled"}}}
-    if provider == "nrp":
+    if provider == "custom":  # vLLM-style servers (Qwen3, Gemma, ...)
         return {"extra_body": {"chat_template_kwargs": {"enable_thinking": bool(thinking)}}}
     raise ValueError(f"no thinking switch implemented for provider {provider!r}; "
                      "leave thinking=None (model default)")

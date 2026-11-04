@@ -62,9 +62,9 @@ def test_default_request_has_no_extras():
     assert set(fake.calls[0]) == {"model", "messages", "max_tokens"}
 
 
-def test_nrp_thinking_switch():
+def test_custom_thinking_switch():
     fake = FakeClient()
-    LLMClient("nrp", "gemma", client=fake, thinking=False, temperature=0).chat([])
+    LLMClient("custom", "gemma", client=fake, thinking=False, temperature=0).chat([])
     assert fake.calls[0]["extra_body"] == {"chat_template_kwargs": {"enable_thinking": False}}
     assert fake.calls[0]["temperature"] == 0
 
@@ -95,6 +95,15 @@ def test_gives_up_after_max_retries():
     with pytest.raises(FakeError):
         LLMClient("deepseek", client=fake, max_retries=2).chat([])
     assert len(fake.calls) == 3
+
+
+def test_env_file_from_variable(tmp_path, monkeypatch):
+    monkeypatch.delenv("DEEPSEEK_API_KEY", raising=False)
+    env = tmp_path / "keys.env"
+    env.write_text("DEEPSEEK_API_KEY=sk-file\n")
+    monkeypatch.setenv("LLM_ENV_FILE", str(env))
+    monkeypatch.setattr("wordle_fibble.llm_client.REPO_DIR", tmp_path / "no-repo")
+    assert load_key("DEEPSEEK_API_KEY") == "sk-file"
 
 
 def test_load_key(tmp_path, monkeypatch):

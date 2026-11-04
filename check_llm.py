@@ -2,7 +2,7 @@
 
     python check_llm.py --provider deepseek                      # deepseek-flash and deepseek-v4-pro
     python check_llm.py --provider deepseek --thinking off
-    python check_llm.py --provider ollama --models gpt-oss:20b   # needs the Ollama pod running
+    python check_llm.py --provider ollama --models gpt-oss:20b   # needs an Ollama server (OLLAMA_BASE_URL)
 
 Prints, per model: the reply, its first 5-letter word, time and tokens used.
 Also appends to results/llm_check.csv.

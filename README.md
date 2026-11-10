@@ -24,13 +24,15 @@ python play.py             # play Wordle in the terminal
 - **`solvers.py`**: two simple players to compare our AI against. One guesses a random word that still fits the colors. The other guesses the fitting word that uses the most common letters.
 - **`letter_probs.py`**: builds the 5 x 26 table of how often each letter appears at each position (the paper's Table I), from the 12,972 allowed words. Saved in `data/letter_probs.csv`.
 - **`llm_client.py`**: connects to LLMs through an OpenAI-compatible API: the hosted DeepSeek API (`deepseek-flash`, `deepseek-v4-pro`), an Ollama server for an open-weight model such as `gpt-oss:20b` (address in `OLLAMA_BASE_URL`), or any other compatible server. Can switch reasoning on or off, and retries when the service is busy.
+- **`dqn.py`**: the Wordle RL solver (task 4), a DQN written in PyTorch. The network outputs 5 x 26 = 130 values (one per position and letter), and a word's value is the sum of its five letter values. It sees the guesses left, which letters were shown present or gray, and a 26 x 5 x 2 coloring array. Reward is -1 per guess, +10 for a win and -10 for a loss. By default it only picks words that still fit the feedback (`mask="candidates"`); `mask="unguessed"` lets it pick any word, so it has to learn the rules itself.
 - **`evaluation.py`**: plays many games with a player and reports how often it wins and how many guesses it needs on average.
 - **`__init__.py`**: lets you import everything with `from wordle_fibble import ...`.
 
 ### Scripts
 - **`play.py`**: play the game yourself in the terminal, or watch a random bot play.
 - **`check_llm.py`**: checks the LLM setup: the key works, the model is served, and one Wordle-style reply from each model.
-- **`evaluate.py`**: runs the two simple players on Wordle and Fibble1–5 and prints their win rates. It can also save the results to a CSV file.
+- **`evaluate.py`**: runs the two simple players on Wordle and Fibble1–5 and prints their win rates. It can also save the results to a CSV file. Add `--dqn checkpoints/dqn_wordle.pt` to include a trained DQN.
+- **`train_dqn.py`**: trains the DQN, e.g. `python train_dqn.py --episodes 20000`. Saves the network to `checkpoints/` and the training curve next to it as a CSV.
 
 ### Other
 - **`tests/`**: automatic checks that the game, colors, lies and filter work correctly. Run them with `python -m pytest -q`.

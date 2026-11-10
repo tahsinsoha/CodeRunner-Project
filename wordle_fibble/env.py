@@ -84,8 +84,10 @@ class FibbleEnv:
         if self.done:
             raise RuntimeError("game is over; call reset() first")
         guess = guess.strip().lower()
-        if len(guess) != WORD_LEN or guess not in self.allowed_set:
-            raise ValueError(f"{guess!r} is not a valid guess")
+        if len(guess) != WORD_LEN:
+            raise ValueError(f"{guess!r} is not a valid guess: type a whole {WORD_LEN}-letter word, e.g. 'crane'")
+        if guess not in self.allowed_set:
+            raise ValueError(f"{guess!r} is not a valid guess: not in the word list")
         info = self._play(guess)
         return self.observation(), self.done, info
 

@@ -16,16 +16,8 @@ from pathlib import Path
 from wordle_fibble.llm_client import PROVIDERS, LLMClient, list_models
 
 # The paper's rules prompt (Appendix A, Listing 1) and a first-turn message.
-RULES = (
-    "You will guess a 5 letter word based off previous guesses and feedback in the form of "
-    "correct: correct place, present: letter is present but not in correct spot, and "
-    "incorrect: letter is not present in the word.\n"
-    "There may be more than one lies, meaning one or more feedbacks will be incorrect.\n"
-    "Assume there are no lies unless otherwise stated.\n"
-    "Respond with the 5 letter word and then the reason why you chose that word, nothing else!\n"
-    "If no feedback is provided, you must guess the word without feedback.\n"
-    "You only have a certain amount of tries to get the word."
-)
+from wordle_fibble.llm_solver import RULES  # noqa: E402
+
 FIRST_TURN = "No feedback yet. You have 6 tries remaining."
 FIELDS = ["provider", "model", "thinking", "ok", "word", "seconds", "input_tokens",
           "output_tokens", "reasoning_chars", "error"]

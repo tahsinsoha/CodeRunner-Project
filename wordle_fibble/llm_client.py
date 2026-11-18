@@ -89,6 +89,7 @@ class LLMReply:
     output_tokens: int = 0
     seconds: float = 0.0
     attempts: int = 1
+    finish_reason: str = ""     # "stop", or "length" when the output hit the token cap
     raw: object = field(default=None, repr=False)
 
 
@@ -98,6 +99,7 @@ class LLMClient:
     thinking: None = provider default, True/False = reasoning on/off.
     reasoning_effort: "low" / "high" / "max" for DeepSeek thinking mode.
     temperature: has no effect in DeepSeek thinking mode.
+    max_tokens: cap on output tokens (reasoning included); None = the provider's own limit.
     """
 
     def __init__(self, provider, model=None, thinking=None, reasoning_effort=None,
@@ -132,7 +134,9 @@ class LLMClient:
         return f"{self.provider}/{self.model}{mode}"
 
     def request_kwargs(self, messages):
-        kwargs = {"model": self.model, "messages": messages, "max_tokens": self.max_tokens}
+        kwargs = {"model": self.model, "messages": messages}
+        if self.max_tokens is not None:
+            kwargs["max_tokens"] = self.max_tokens
         if self.temperature is not None:
             kwargs["temperature"] = self.temperature
         if self.reasoning_effort is not None:
@@ -155,7 +159,8 @@ class LLMClient:
                 wait = min(120, 2 ** attempt) + random.uniform(0, 1)
                 print(f"[{self.label}] {type(e).__name__}; retry {attempt} in {wait:.0f}s", flush=True)
                 time.sleep(wait)
-        msg = resp.choices[0].message
+        choice = resp.choices[0]
+        msg = choice.message
         usage = getattr(resp, "usage", None)
         return LLMReply(
             text=(msg.content or "").strip(),
@@ -164,6 +169,7 @@ class LLMClient:
             output_tokens=getattr(usage, "completion_tokens", 0) or 0,
             seconds=round(time.perf_counter() - start, 2),
             attempts=attempt,
+            finish_reason=getattr(choice, "finish_reason", "") or "",
             raw=resp,
         )
 

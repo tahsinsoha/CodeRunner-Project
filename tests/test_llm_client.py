@@ -56,6 +56,23 @@ def test_deepseek_thinking_switch():
         assert kw["extra_body"] == {"thinking": {"type": expected}}
 
 
+def test_no_token_cap_when_max_tokens_is_none():
+    fake = FakeClient()
+    LLMClient("deepseek", client=fake, max_tokens=None).chat([])
+    assert "max_tokens" not in fake.calls[0]
+
+
+def test_finish_reason_is_kept():
+    fake = FakeClient()
+    orig = fake.create
+    def create(**kw):
+        resp = orig(**kw)
+        resp.choices[0].finish_reason = "length"
+        return resp
+    fake.chat.completions.create = create
+    assert LLMClient("deepseek", client=fake).chat([]).finish_reason == "length"
+
+
 def test_default_request_has_no_extras():
     fake = FakeClient()
     LLMClient("deepseek", client=fake).chat([])

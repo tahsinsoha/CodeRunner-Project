@@ -54,12 +54,15 @@ def main():
     p.add_argument("--thinking", choices=["default", "on", "off"], default="default")
     p.add_argument("--reasoning-effort", default=None, help="DeepSeek thinking: low / high / max")
     p.add_argument("--temperature", type=float, default=None)
-    p.add_argument("--max-tokens", type=int, default=4096)
+    p.add_argument("--max-tokens", type=int, default=None,
+                   help="cap on output tokens per call (reasoning included); default: no cap")
+    p.add_argument("--timeout", type=float, default=600, help="seconds to wait for one reply")
     p.add_argument("--lies", nargs="+", type=int, default=[0, 1, 2, 3, 4, 5])
     p.add_argument("--guesses", type=int, default=None, help="default: 6 for Wordle, 9 for Fibble")
     p.add_argument("--games", type=int, default=50)
     p.add_argument("--retries", type=int, default=5, help="re-asks for guesses that break the feedback")
-    p.add_argument("--invalid-retries", type=int, default=3, help="re-asks for replies with no valid word")
+    p.add_argument("--invalid-retries", type=int, default=3,
+                   help="re-asks for empty replies or replies with no valid word")
     p.add_argument("--workers", type=int, default=4, help="games played at the same time")
     p.add_argument("--opener", action="store_true", help="random first guess, as in original Fibble")
     p.add_argument("--seed", type=int, default=0)
@@ -76,7 +79,7 @@ def main():
     def make_llm():
         return LLMClient(args.provider, args.model, thinking=thinking,
                          reasoning_effort=args.reasoning_effort, temperature=args.temperature,
-                         max_tokens=args.max_tokens)
+                         max_tokens=args.max_tokens, timeout=args.timeout)
 
     secrets = secret_list(args.games, seed=args.seed)
     print(f"{'solver':<34}{'game':<9}{'win %':>8}{'mean':>7}  calls  retries  tokens in/out")

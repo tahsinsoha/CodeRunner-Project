@@ -9,6 +9,8 @@ Each turn the model gets the paper's prompts (Appendix A):
 The reply should start with the guess. We take the first 5-letter word from
 it (see `parse_guess`). Then the retry loop (the paper's second phase):
 
+- empty reply (for example the reasoning used up the token cap): the same
+  question is sent again, up to `invalid_retries` times;
 - not a word / not in the word list / already guessed: always asked again,
   up to `invalid_retries` times, since the game cannot play such a guess;
 - does not fit the feedback (given the number of lies): asked again up to
@@ -146,7 +148,7 @@ class TurnLog:
     """What happened while choosing one guess."""
     guess: str = ""
     llm_calls: int = 0
-    problems: list = field(default_factory=list)   # e.g. ["not_in_list", "inconsistent"]
+    problems: list = field(default_factory=list)   # e.g. ["truncated", "not_in_list", "inconsistent"]
     fallback: bool = False
     inconsistent_played: bool = False
     input_tokens: int = 0
@@ -223,6 +225,15 @@ class LLMSolver(Solver):
             log.reasoning_chars += len(reply.reasoning or "")
             if self.keep_replies:
                 log.replies.append(reply.text)
+            if not reply.text.strip():
+                # Nothing to answer to (often the reasoning hit the token cap):
+                # ask the same question again instead of adding an empty turn.
+                log.problems.append("truncated" if reply.finish_reason == "length" else "empty")
+                if bad_retries >= self.invalid_retries:
+                    word, log.fallback = self._fallback(obs), True
+                    break
+                bad_retries += 1
+                continue
             guess = parse_guess(reply.text, self.allowed)
             problem = self._problem(guess, obs)
             if problem is None:

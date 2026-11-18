@@ -26,7 +26,10 @@ ALLOWED = set(load_allowed())
 
 
 class ScriptedLLM:
-    """Returns the given replies in order, then repeats the last one."""
+    """Returns the given replies in order, then repeats the last one.
+
+    A reply can be a (text, finish_reason) pair to fake a cut-off answer.
+    """
 
     label = "fake"
 
@@ -36,8 +39,9 @@ class ScriptedLLM:
 
     def chat(self, messages):
         self.calls.append([dict(m) for m in messages])
-        text = self.replies.pop(0) if len(self.replies) > 1 else self.replies[0]
-        return LLMReply(text=text, input_tokens=10, output_tokens=5)
+        item = self.replies.pop(0) if len(self.replies) > 1 else self.replies[0]
+        text, finish = item if isinstance(item, tuple) else (item, "stop")
+        return LLMReply(text=text, input_tokens=10, output_tokens=5, finish_reason=finish)
 
 
 @pytest.fixture(scope="module")
@@ -159,6 +163,23 @@ def test_fibble_inconsistent_message_mentions_lies(cf):
     solver = LLMSolver(llm, candidate_filter=cf)
     solver.act(obs)
     assert "there are 2 lies in every feedback line" in llm.calls[1][-1]["content"]
+
+
+def test_empty_reply_is_resent_without_adding_a_turn(cf):
+    llm = ScriptedLLM(("", "length"), ("", "stop"), "EARLY")
+    solver = LLMSolver(llm, candidate_filter=cf)
+    assert solver.act(obs_after("early", ["coral"])) == "early"
+    t = solver.turns[0]
+    assert t.problems == ["truncated", "empty"] and t.llm_calls == 3 and not t.fallback
+    assert all(len(c) == 2 for c in llm.calls)        # same question each time, no empty turns
+
+
+def test_only_empty_replies_end_in_fallback(cf):
+    llm = ScriptedLLM(("", "length"))
+    solver = LLMSolver(llm, invalid_retries=2, candidate_filter=cf)
+    obs = obs_after("early", ["coral"])
+    assert solver.act(obs) in cf.from_obs(obs)
+    assert solver.turns[0].fallback and solver.turns[0].llm_calls == 3
 
 
 def test_no_retries_plays_inconsistent_guess(cf):

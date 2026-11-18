@@ -1,6 +1,6 @@
 # Task 3: Data preparation and LLM setup (Lakshmi)
 
-This note covers what I did for task 3 in our proposal, where the code is, what we found, and what is left for the next tasks. Everything here is on `main` as of commit `3374986`.
+This note covers what I did for task 3 in our proposal, where the code is, what we found, and what is left for the next tasks. Everything here is on `main`; the open-weight model check was finished on Nov 17.
 
 Task 3 in the proposal has three parts:
 
@@ -8,7 +8,7 @@ Task 3 in the proposal has three parts:
 2. The 5 x 26 letter-by-position probability table (the paper's Table I)
 3. LLM API setup for the LLM solver (task 6), using current models instead of the paper's GPT-4, GPT-4o and o1-preview
 
-All three are done, except one check on the open-weight model (see section 3.4).
+All three are done.
 
 ---
 
@@ -84,7 +84,7 @@ The proposal says to test current models instead of the paper's, with one hosted
 | Type | Provider in the code | Models | Notes |
 |---|---|---|---|
 | Hosted | `deepseek` | `deepseek-flash` (DeepSeek V4.1 Flash), `deepseek-v4-pro` | Paid API. Thinking (reasoning) can be turned on or off per request |
-| Open-weight | `ollama` | `gpt-oss:20b` (default) | OpenAI's open-weight reasoning model, run through an Ollama server |
+| Open-weight | `ollama` | `qwen2.5:7b` (default) | Alibaba's Qwen 2.5, 7B parameters, run through an Ollama server. No reasoning mode |
 | Other | `custom` | any | Any other OpenAI-compatible server |
 
 None of these were in the paper. The thinking switch is useful for our comparison: the paper's main LLM result is that the reasoning model (o1-preview, 95.74% on Wordle) did far better than GPT-4o (21.27%). With DeepSeek we can run the same model with and without reasoning.
@@ -139,7 +139,7 @@ It looks in the repo's `.env` first (already in `.gitignore`), then in the file 
 ```bash
 python check_llm.py --provider deepseek
 python check_llm.py --provider deepseek --thinking off
-python check_llm.py --provider ollama --models gpt-oss:20b
+python check_llm.py --provider ollama --models qwen2.5:7b
 ```
 
 **DeepSeek results (Nov 3):**
@@ -155,17 +155,27 @@ Both models work, and the thinking switch works (no reasoning text when it is of
 
 One thing to keep in mind for the solver: with thinking off, `deepseek-v4-pro` answered with only the word and skipped the reason the prompt asks for. So the solver should not depend on the reply format. It should take the first 5-letter word, which is what `check_llm.py` does (`first_word()`).
 
-**Ollama / gpt-oss:20b:** the model is downloaded and the server answers, but the full check has not passed yet. We could not get a GPU large enough to load the model in time (it needs about 11 GB of GPU memory, ideally 16 GB or more). On smaller cards, loading timed out. The code side is done. Once an Ollama server with the model is running, the check is just the third command above. If loading keeps being a problem, a smaller open-weight model such as `qwen3:8b` (about 5 GB) is an easy swap: only the model name changes.
+**Ollama / qwen2.5:7b (Nov 17):**
+
+| Model | Load time | Runs on | First guess | Time | Input / output tokens |
+|---|---|---|---|---|---|
+| qwen2.5:7b | 70 s (first load only) | 100% GPU | SOARE | 1.49 s | 144 / 19 |
+
+SOARE is a valid guess (it is in `allowed.txt`, not in the answer list). The reply followed the format the prompt asks for.
+
+We first tried OpenAI's `gpt-oss:20b` as the open-weight model, but it needs about 13 GB of GPU memory and we could not get a GPU that loaded it in time, so we switched to Qwen 2.5 7B (about 4.7 GB), which loads in about a minute. If needed, `qwen2.5:3b` (about 2 GB) is a drop-in replacement: only the model name changes.
+
+Qwen 2.5 has no reasoning mode, so the reasoning on/off comparison in our experiments comes from DeepSeek. Qwen gives us a small open-weight model to compare against the hosted ones.
 
 ---
 
 ## 4. Tests
 
 ```bash
-python -m pytest -q      # 69 passed
+python -m pytest -q      # 75 passed (Nov 17, including the DQN tests)
 ```
 
-This includes Soha's tests plus `test_letter_probs.py` and `test_llm_client.py`. The LLM tests use a fake client, so they need no key and no network.
+This includes Soha's tests (environment, filter, DQN) plus `test_letter_probs.py` and `test_llm_client.py`. The LLM tests use a fake client, so they need no key and no network.
 
 ---
 
@@ -199,3 +209,4 @@ This includes Soha's tests plus `test_letter_probs.py` and `test_llm_client.py`.
 | `eef3556` | Letter-position probability table, its tests, saved CSV, full `requirements.txt` |
 | `ccc8ad1` | LLM client (DeepSeek and Ollama), `check_llm.py`, offline tests |
 | `1fdb182`, `3374986` | Made the LLM settings generic (addresses and key file come from environment variables) and kept deployment files out of the repo |
+| (this commit) | Default open-weight model changed to `qwen2.5:7b`; check results added here |

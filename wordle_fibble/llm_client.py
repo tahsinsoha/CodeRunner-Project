@@ -4,7 +4,7 @@ Providers (none of these models were tested in the paper):
 
     deepseek : hosted DeepSeek API (paid). Key in DEEPSEEK_API_KEY.
                Models: deepseek-flash (V4.1 Flash), deepseek-v4-pro.
-    ollama   : an Ollama server for an open-weight model such as gpt-oss:20b.
+    ollama   : an Ollama server for an open-weight model such as qwen2.5:7b.
                Address in OLLAMA_BASE_URL (default http://localhost:11434/v1).
                No key needed.
     custom   : any other OpenAI-compatible server. Address in LLM_BASE_URL,
@@ -39,7 +39,7 @@ PROVIDERS = {
     "ollama": {
         "base_url": os.environ.get("OLLAMA_BASE_URL", "http://localhost:11434/v1"),
         "key_var": None,  # Ollama ignores the key, but the client needs some value
-        "models": ["gpt-oss:20b"],
+        "models": ["qwen2.5:7b"],
         "key_help": "",
     },
     "custom": {

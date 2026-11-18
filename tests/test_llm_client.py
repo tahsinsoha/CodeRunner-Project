@@ -43,7 +43,7 @@ def test_reply_fields():
 
 def test_default_models():
     assert LLMClient("deepseek", client=FakeClient()).model == "deepseek-flash"
-    assert LLMClient("ollama", client=FakeClient()).model == "gpt-oss:20b"
+    assert LLMClient("ollama", client=FakeClient()).model == "qwen2.5:7b"
 
 
 def test_deepseek_thinking_switch():
@@ -124,4 +124,4 @@ def test_missing_key_message(monkeypatch):
 
 def test_ollama_needs_no_key(monkeypatch):
     monkeypatch.setattr("wordle_fibble.llm_client.load_key", lambda var: None)
-    assert LLMClient("ollama").model == "gpt-oss:20b"  # builds a real client, no request sent
+    assert LLMClient("ollama").model == "qwen2.5:7b"  # builds a real client, no request sent

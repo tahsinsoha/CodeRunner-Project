@@ -20,7 +20,7 @@ from pathlib import Path
 
 from wordle_fibble.evaluation import secret_list
 from wordle_fibble.llm_client import LLMClient
-from wordle_fibble.llm_runner import run_setting
+from wordle_fibble.llm_runner import RunStopped, run_setting
 
 
 def solver_label(args):
@@ -87,10 +87,18 @@ def main():
         guesses = args.guesses or (6 if n_lies == 0 else 9)
         game = "Wordle" if n_lies == 0 else f"Fibble{n_lies}"
         out = Path(args.out_dir) / f"{label}_{game}_g{guesses}.jsonl"
-        row = run_setting(make_llm, label, secrets, n_lies, guesses, out, workers=args.workers,
-                          seed=args.seed, opener=args.opener, retries=args.retries,
-                          invalid_retries=args.invalid_retries, keep_replies=not args.no_replies,
-                          log=lambda msg: print("   ", msg, flush=True))
+        try:
+            row = run_setting(make_llm, label, secrets, n_lies, guesses, out, workers=args.workers,
+                              seed=args.seed, opener=args.opener, retries=args.retries,
+                              invalid_retries=args.invalid_retries, keep_replies=not args.no_replies,
+                              log=lambda msg: print("   ", msg, flush=True))
+        except RunStopped as e:
+            print(f"\nSTOPPED: {e}", flush=True)
+            raise SystemExit(2)
+        if row["games"] < len(secrets):
+            print(f"    {game}: only {row['games']} of {len(secrets)} games done; "
+                  "summary row not written, run the same command again", flush=True)
+            continue
         write_summary(args.csv, row)
         print(f"{label:<34}{game:<9}{row['win_rate']:>8.2%}{row['mean_guesses']:>7.2f}  "
               f"{row['llm_calls']:>5}  {row['retries']:>7}  {row['input_tokens']}/{row['output_tokens']}",

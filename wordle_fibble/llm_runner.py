@@ -9,6 +9,11 @@ solvers.
 Each finished game is appended as one JSON line to the setting's .jsonl file.
 Running the same setting again skips the games already in the file, so an
 interrupted run (or a run that hit an API limit) picks up where it stopped.
+
+If the API says the account is out of credit or the key is wrong (HTTP 401,
+402, 403), the run stops at once with `RunStopped`; finished games stay saved.
+Any other error ends only that game, which is not saved, so the next run
+plays it again.
 """
 
 import json
@@ -24,6 +29,19 @@ from .feedback import COLOR_CHARS
 from .filter import CandidateFilter
 from .llm_solver import LLMSolver
 from .words import load_allowed, load_answers
+
+
+class RunStopped(RuntimeError):
+    """The API refused all further requests (no credit, bad key)."""
+
+
+FATAL_STATUS = {401: "the API key was rejected", 402: "the account is out of credit",
+                403: "the API refused access"}
+
+
+def fatal_reason(error):
+    """Why no further request can succeed, or None for an error worth retrying later."""
+    return FATAL_STATUS.get(getattr(error, "status_code", None))
 
 
 def colors_str(colors):
@@ -124,10 +142,23 @@ def run_setting(make_llm, solver_name, secrets, n_lies, max_guesses, out_path, w
         return play_game(i, secrets[i], make_llm, n_lies, max_guesses, seed, opener, retries,
                          invalid_retries, candidate_filter, answers, allowed, keep_replies)
 
+    stop, failed = None, []
     with ThreadPoolExecutor(max_workers=max(1, workers)) as pool:
         futures = {pool.submit(task, i): i for i in todo}
         for fut in as_completed(futures):
-            r = fut.result()
+            try:
+                r = fut.result()
+            except Exception as e:  # noqa: BLE001 - one game's error must not lose the others
+                reason = fatal_reason(e)
+                if reason and stop is None:
+                    stop = f"{reason} ({type(e).__name__}: {e})"
+                    for f in futures:
+                        f.cancel()          # games not started yet are dropped
+                elif not reason:
+                    failed.append(futures[fut])
+                    log(f"[{solver_name} {game}] game {futures[fut] + 1} failed and was not saved "
+                        f"({type(e).__name__}: {str(e)[:120]}); it will be played on the next run")
+                continue
             with lock:
                 with open(out_path, "a") as f:
                     f.write(json.dumps(r) + "\n")
@@ -136,5 +167,10 @@ def run_setting(make_llm, solver_name, secrets, n_lies, max_guesses, out_path, w
             log(f"[{solver_name} {game}] game {done}/{len(secrets)}: {r['secret']} "
                 f"{'WON' if r['won'] else 'lost'} in {r['n_guesses']}  "
                 f"(calls {r['llm_calls']}, retries {r['retries']}, {r['seconds']}s)")
+    if stop:
+        raise RunStopped(f"[{solver_name} {game}] stopped: {stop}. {len(records)} of {len(secrets)} "
+                         "games are saved; run the same command again to continue.")
+    if failed:
+        log(f"[{solver_name} {game}] {len(failed)} game(s) failed; run the same command again to play them")
     return summarize({i: records[i] for i in range(len(secrets)) if i in records},
                      game, solver_name, max_guesses, time.perf_counter() - start)

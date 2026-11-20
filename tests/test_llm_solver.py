@@ -10,7 +10,7 @@ from wordle_fibble.evaluation import evaluate, secret_list
 from wordle_fibble.feedback import GRAY, GREEN, YELLOW
 from wordle_fibble.filter import CandidateFilter
 from wordle_fibble.llm_client import LLMReply
-from wordle_fibble.llm_runner import load_records, run_setting
+from wordle_fibble.llm_runner import RunStopped, load_records, run_setting
 from wordle_fibble.llm_solver import (
     LLMSolver,
     feedback_block,
@@ -306,3 +306,62 @@ def test_runner_matches_evaluate_on_same_secrets(tmp_path, cf):
     ref = evaluate(LLMSolver(_PickFirstCandidate(cf, 1), candidate_filter=cf), secrets, 1, 9)
     for k in ("win_rate", "mean_guesses", "wins_by_round"):
         assert row[k] == ref[k]
+
+
+class _APIError(Exception):
+    def __init__(self, status_code):
+        super().__init__(f"Error code: {status_code}")
+        self.status_code = status_code
+
+
+class _FailingLLM(_PickFirstCandidate):
+    """Plays normally, but raises for chosen secrets (seen through the prompt count)."""
+
+    def __init__(self, cf, n_lies, error):
+        super().__init__(cf, n_lies)
+        self.error = error
+
+    def chat(self, messages):
+        if self.error is not None:
+            raise self.error
+        return super().chat(messages)
+
+
+def test_out_of_credit_stops_run_and_keeps_saved_games(tmp_path, cf):
+    secrets = secret_list(8, seed=6)
+    out = tmp_path / "credit.jsonl"
+    count = iter(range(100))
+    lock = threading.Lock()
+
+    def make_llm():
+        with lock:
+            k = next(count)
+        return _FailingLLM(cf, 0, _APIError(402) if k >= 3 else None)   # credit runs out after 3 games
+
+    with pytest.raises(RunStopped, match="out of credit"):
+        run_setting(make_llm, "fake", secrets, 0, 6, out, workers=1, candidate_filter=cf, log=lambda m: None)
+    saved = load_records(out)
+    assert len(saved) == 3
+    # Credit is back: the next run plays only the missing games.
+    row = run_setting(lambda: _PickFirstCandidate(cf, 0), "fake", secrets, 0, 6, out,
+                      workers=2, candidate_filter=cf, log=lambda m: None)
+    assert row["games"] == 8 and len(load_records(out)) == 8
+
+
+def test_other_errors_skip_only_that_game(tmp_path, cf):
+    secrets = secret_list(6, seed=7)
+    out = tmp_path / "flaky.jsonl"
+    count = iter(range(100))
+    lock = threading.Lock()
+    messages = []
+
+    def make_llm():
+        with lock:
+            k = next(count)
+        return _FailingLLM(cf, 0, ValueError("boom") if k == 2 else None)
+
+    row = run_setting(make_llm, "fake", secrets, 0, 6, out, workers=1, candidate_filter=cf, log=messages.append)
+    assert row["games"] == 5 and any("will be played on the next run" in m for m in messages)
+    row = run_setting(lambda: _PickFirstCandidate(cf, 0), "fake", secrets, 0, 6, out,
+                      workers=1, candidate_filter=cf, log=lambda m: None)
+    assert row["games"] == 6

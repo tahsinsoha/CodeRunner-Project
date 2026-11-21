@@ -11,7 +11,9 @@ Running the same setting again skips the games already in the file, so an
 interrupted run (or a run that hit an API limit) picks up where it stopped.
 
 If the API says the account is out of credit or the key is wrong (HTTP 401,
-402, 403), the run stops at once with `RunStopped`; finished games stay saved.
+402, 403), the run stops with `RunStopped`: games not started are dropped, and
+games in progress quit at their next model call (so they are not finished and
+paid for while a restart plays them again). Finished games stay saved.
 Any other error ends only that game, which is not saved, so the next run
 plays it again.
 """
@@ -46,6 +48,19 @@ def fatal_reason(error):
 
 def colors_str(colors):
     return "".join(COLOR_CHARS[int(c)] for c in colors)
+
+
+class _StopGuard:
+    """Wraps an LLM so every call first checks whether the run was told to stop."""
+
+    def __init__(self, llm, stop_event):
+        self.llm, self.stop_event = llm, stop_event
+        self.label = getattr(llm, "label", "model")
+
+    def chat(self, messages):
+        if self.stop_event.is_set():
+            raise RunStopped("run stopping")
+        return self.llm.chat(messages)
 
 
 def play_game(index, secret, make_llm, n_lies, max_guesses, seed, opener, retries,
@@ -136,10 +151,16 @@ def run_setting(make_llm, solver_name, secrets, n_lies, max_guesses, out_path, w
     if records:
         log(f"[{solver_name} {game}] {len(records)} games already done, {len(todo)} to play")
     lock = threading.Lock()
+    stop_event = threading.Event()
     start = time.perf_counter()
 
+    def guarded_llm():
+        return _StopGuard(make_llm(), stop_event)
+
     def task(i):
-        return play_game(i, secrets[i], make_llm, n_lies, max_guesses, seed, opener, retries,
+        if stop_event.is_set():
+            raise RunStopped("run stopping")
+        return play_game(i, secrets[i], guarded_llm, n_lies, max_guesses, seed, opener, retries,
                          invalid_retries, candidate_filter, answers, allowed, keep_replies)
 
     stop, failed = None, []
@@ -148,10 +169,13 @@ def run_setting(make_llm, solver_name, secrets, n_lies, max_guesses, out_path, w
         for fut in as_completed(futures):
             try:
                 r = fut.result()
+            except RunStopped:
+                continue                    # quit because another game hit a fatal error
             except Exception as e:  # noqa: BLE001 - one game's error must not lose the others
                 reason = fatal_reason(e)
                 if reason and stop is None:
                     stop = f"{reason} ({type(e).__name__}: {e})"
+                    stop_event.set()        # games in progress quit at their next call
                     for f in futures:
                         f.cancel()          # games not started yet are dropped
                 elif not reason:

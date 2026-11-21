@@ -365,3 +365,39 @@ def test_other_errors_skip_only_that_game(tmp_path, cf):
     row = run_setting(lambda: _PickFirstCandidate(cf, 0), "fake", secrets, 0, 6, out,
                       workers=1, candidate_filter=cf, log=lambda m: None)
     assert row["games"] == 6
+
+
+def test_fatal_error_stops_games_in_progress(tmp_path, cf):
+    """After a 402, games already running must quit, not finish (and be paid for)."""
+    import time as _time
+    secrets = secret_list(12, seed=8)
+    out = tmp_path / "inflight.jsonl"
+    count = iter(range(1000))
+    lock = threading.Lock()
+    calls_after_stop = []
+    stopped_at = []
+
+    class Slow(_PickFirstCandidate):
+        def __init__(self, k):
+            super().__init__(cf, 0)
+            self.k = k
+
+        def chat(self, messages):
+            _time.sleep(0.05)
+            if self.k == 0 and not stopped_at:
+                stopped_at.append(_time.perf_counter())
+                raise _APIError(402)
+            if stopped_at:
+                calls_after_stop.append(1)
+            return super().chat(messages)
+
+    def make_llm():
+        with lock:
+            return Slow(next(count))
+
+    with pytest.raises(RunStopped):
+        run_setting(make_llm, "fake", secrets, 0, 6, out, workers=4, candidate_filter=cf, log=lambda m: None)
+    # The other 3 games in progress may still make the call they were starting
+    # (at most 2 each); none of them may run on to the end and be saved.
+    assert len(calls_after_stop) <= 6
+    assert len(load_records(out)) == 0

@@ -34,6 +34,7 @@ python play.py             # play Wordle in the terminal
 - **`play.py`**: play the game yourself in the terminal, or watch a random bot play.
 - **`check_llm.py`**: checks the LLM setup: the key works, the model is served, and one Wordle-style reply from each model.
 - **`run_llm.py`**: runs the LLM solver on Wordle and Fibble1–5, e.g. `python run_llm.py --provider deepseek --model deepseek-flash --games 50`. Writes one line per game to `results/llm/` and summary rows to `results/llm_results.csv` (same columns as `evaluate.py`, plus LLM calls, retries and tokens).
+- **`summarize_llm.py`**: checks every saved LLM game (right secret, right number of lies per line, no repeated guesses) and builds `results/llm_results.csv`, including the win rate the model got without any help from the fallback.
 - **`evaluate.py`**: runs the two simple players on Wordle and Fibble1–5 and prints their win rates. It can also save the results to a CSV file. Add `--dqn checkpoints/dqn_wordle.pt` to include a trained DQN.
 - **`train_dqn.py`**: trains the DQN, e.g. `python train_dqn.py --episodes 20000`. Saves the network to `checkpoints/` and the training curve next to it as a CSV.
 
